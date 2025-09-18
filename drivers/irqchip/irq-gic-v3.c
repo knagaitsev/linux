@@ -31,6 +31,8 @@
 
 #include "irq-gic-common.h"
 
+void record_irq_cycle_time(u64 cycles) __attribute__((weak));
+
 #define GICD_INT_NMI_PRI	(GICD_INT_DEF_PRI & ~0x80)
 
 #define FLAGS_WORKAROUND_GICR_WAKER_MSM8996	(1ULL << 0)
@@ -702,11 +704,34 @@ static u32 do_read_iar(struct pt_regs *regs)
 	return iar;
 }
 
+static inline uint64_t read_cycle_counter(void) {
+    uint64_t val;
+    asm volatile("mrs %0, pmccntr_el0" : "=r"(val));
+    return val;
+}
+
 static asmlinkage void __exception_irq_entry gic_handle_irq(struct pt_regs *regs)
 {
+	// unsigned int cpu;
+	// struct task_struct *tsk;
 	u32 irqnr;
+	uint64_t cycles;
 
+	cycles = read_cycle_counter();
+
+	if (record_irq_cycle_time) {
+		record_irq_cycle_time(cycles);
+	}
 	irqnr = do_read_iar(regs);
+
+	// if (user_mode(regs)) {
+	// 	cpu = smp_processor_id();
+	// 	if (cpu == 76) {
+	// 		// TODO: print the cycle counter value here
+	// 		tsk = current;
+	// 		pr_info("irqnr=%u, pid=%d, comm=%s, cycles=%lu\n", irqnr, tsk->pid, tsk->comm, cycles);
+	// 	}
+	// }
 
 	/* Check for special IDs first */
 	if ((irqnr >= 1020 && irqnr <= 1023))
