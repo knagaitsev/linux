@@ -66,7 +66,7 @@ ifneq ($(CONFIG_SMP),y)
 obj-y += up.o
 endif
 
-obj-y += beandip_register.o
+obj-y += cycle_tracker.o
 obj-$(CONFIG_UID16) += uid16.o
 obj-$(CONFIG_MODULES) += module.o
 obj-$(CONFIG_MODULE_SIG) += module_signing.o
