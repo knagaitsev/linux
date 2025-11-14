@@ -25,6 +25,21 @@
 #include <asm/sysreg.h>
 #include <asm/system_misc.h>
 
+void (*irq_entry_cycle_callback)(uint64_t cycles);
+EXPORT_SYMBOL_GPL(irq_entry_cycle_callback);
+
+void (*tracker_raise_el1_flag_callback)(void);
+EXPORT_SYMBOL_GPL(tracker_raise_el1_flag_callback);
+
+void (*tracker_lower_el1_flag_callback)(void);
+EXPORT_SYMBOL_GPL(tracker_lower_el1_flag_callback);
+
+static inline uint64_t read_cycle_counter(void) {
+    uint64_t val;
+    asm volatile("mrs %0, pmccntr_el0" : "=r"(val));
+    return val;
+}
+
 /*
  * Handle IRQ/context state management when entering from kernel mode.
  * Before this function is called it is not safe to call regular kernel code,
@@ -435,7 +450,15 @@ asmlinkage void noinstr el1h_64_sync_handler(struct pt_regs *regs)
 static void noinstr el1_interrupt(struct pt_regs *regs,
 				  void (*handler)(struct pt_regs *))
 {
+	// uint64_t cycles;
+	
 	write_sysreg(DAIF_PROCCTX_NOIRQ, daif);
+
+	// RAISE FLAG THAT WE SAW EL1 INTERRUPT
+
+	// if (irq_entry_cycle_callback) {
+	// 	irq_entry_cycle_callback(cycles);
+	// }
 
 	enter_el1_irq_or_nmi(regs);
 	do_interrupt_handler(regs, handler);
@@ -660,14 +683,26 @@ asmlinkage void noinstr el0t_64_sync_handler(struct pt_regs *regs)
 static void noinstr el0_interrupt(struct pt_regs *regs,
 				  void (*handler)(struct pt_regs *))
 {
+	uint64_t cycles;
+	cycles = read_cycle_counter();
+
 	enter_from_user_mode(regs);
 
 	write_sysreg(DAIF_PROCCTX_NOIRQ, daif);
+
+	// Check if EL1 flag was raised, in which case this cycle count has been invalidated due to noise
+
+	// READ CYCLE COUNT
+	if (irq_entry_cycle_callback) {
+		irq_entry_cycle_callback(cycles);
+	}
 
 	if (regs->pc & BIT(55))
 		arm64_apply_bp_hardening();
 
 	do_interrupt_handler(regs, handler);
+
+	// Flip EL1 flag back to zero
 
 	exit_to_user_mode(regs);
 }
